@@ -1,0 +1,28 @@
+# Flask Backend Dependencies
+
+# Core Flask
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Migrate==4.0.5
+Flask-CORS==4.0.0
+
+# Database
+SQLAlchemy==2.0.21
+
+# Authentication
+PyJWT==2.8.0
+Werkzeug==2.3.7
+
+# Development and Testing
+pytest==7.4.2
+pytest-cov==4.1.0
+pytest-flask==1.2.0
+
+# Production WSGI server
+gunicorn==21.2.0
+
+# Environment management
+python-dotenv==1.0.0
+
+# Utilities
+requests==2.31.0

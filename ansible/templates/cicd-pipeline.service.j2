@@ -1,0 +1,18 @@
+[Unit]
+Description=Local CI/CD Pipeline
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ project_dir }}
+User={{ cicd_user }}
+Group={{ cicd_user }}
+ExecStart=/usr/local/bin/docker-compose up -d
+ExecStop=/usr/local/bin/docker-compose down
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

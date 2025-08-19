@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Forgejo - Git Server
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:1.21
+    container_name: forgejo
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__database__DB_TYPE=sqlite3
+      - FORGEJO__database__PATH=/data/forgejo.db
+      - FORGEJO__server__DOMAIN=localhost
+      - FORGEJO__server__HTTP_PORT=3000
+      - FORGEJO__server__ROOT_URL=http://localhost:3000
+      - FORGEJO__actions__ENABLED=true
+      - FORGEJO__actions__DEFAULT_ACTIONS_URL=https://code.forgejo.org
+    restart: unless-stopped
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/forgejo:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    depends_on:
+      - registry
+
+  # Gitea Actions Runner
+  runner:
+    image: gitea/act_runner:latest
+    container_name: gitea-runner
+    restart: unless-stopped
+    depends_on:
+      - forgejo
+    volumes:
+      - ./data/runner:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GITEA_INSTANCE_URL=http://forgejo:3000
+      - GITEA_RUNNER_REGISTRATION_TOKEN_FILE=/data/token
+    networks:
+      - cicd-network
+    command: >
+      sh -c "
+        while ! nc -z forgejo 3000; do sleep 1; done;
+        act_runner register --no-interactive --instance http://forgejo:3000 --name docker-runner --labels docker:docker://node:18-alpine,ubuntu:docker://ubuntu:22.04;
+        act_runner daemon
+      "
+
+  # ArgoCD Server
+  argocd-server:
+    image: quay.io/argoproj/argocd:v2.9.3
+    container_name: argocd-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ARGOCD_SERVER_INSECURE=true
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/argocd:/home/argocd
+    command: >
+      sh -c "
+        argocd-server --insecure --staticassets /shared/app
+      "
+
+  # ArgoCD Application Controller
+  argocd-application-controller:
+    image: quay.io/argoproj/argocd:v2.9.3
+    container_name: argocd-application-controller
+    restart: unless-stopped
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/argocd:/home/argocd
+    command: argocd-application-controller
+
+  # ArgoCD Repository Server
+  argocd-repo-server:
+    image: quay.io/argoproj/argocd:v2.9.3
+    container_name: argocd-repo-server
+    restart: unless-stopped
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/argocd:/home/argocd
+    command: argocd-repo-server
+
+  # Local Container Registry
+  registry:
+    image: registry:2
+    container_name: local-registry
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/registry:/var/lib/registry
+    environment:
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+
+  # Prometheus (Optional Monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    networks:
+      - cicd-network
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./data/prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    profiles:
+      - monitoring
+
+  # Grafana (Optional Monitoring)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    networks:
+      - cicd-network
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    profiles:
+      - monitoring
+
+networks:
+  cicd-network:
+    driver: bridge
+
+# All data is now stored in local ./data/ directory

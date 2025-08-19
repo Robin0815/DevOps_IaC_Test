@@ -1,0 +1,83 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flask-react-ingress
+  namespace: flask-react-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  rules:
+  - host: flask-react-app.local
+    http:
+      paths:
+      # Frontend routes
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: react-frontend-service
+            port:
+              number: 80
+      # Backend API routes
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: flask-backend-service
+            port:
+              number: 5000
+      # Health check routes
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: flask-backend-service
+            port:
+              number: 5000
+
+---
+# Alternative ingress for production with TLS
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flask-react-ingress-tls
+  namespace: flask-react-app
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - flask-react-app.yourdomain.com
+    secretName: flask-react-tls
+  rules:
+  - host: flask-react-app.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: react-frontend-service
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: flask-backend-service
+            port:
+              number: 5000
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: flask-backend-service
+            port:
+              number: 5000

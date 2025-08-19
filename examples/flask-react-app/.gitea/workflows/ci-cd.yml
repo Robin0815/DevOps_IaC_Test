@@ -1,0 +1,284 @@
+name: Flask React CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: localhost:5000
+  BACKEND_IMAGE: flask-react-backend
+  FRONTEND_IMAGE: flask-react-frontend
+
+jobs:
+  # Backend Testing
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run backend linting
+        run: |
+          cd backend
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Run backend tests
+        run: |
+          cd backend
+          python -m pytest tests/ -v --cov=app --cov-report=xml
+      
+      - name: Upload backend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+
+  # Frontend Testing
+  frontend-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Run frontend linting
+        run: |
+          cd frontend
+          npm run lint
+      
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test:coverage
+      
+      - name: Upload frontend coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run backend security scan
+        run: |
+          cd backend
+          pip install safety bandit
+          safety check -r requirements.txt
+          bandit -r . -f json -o bandit-report.json || true
+      
+      - name: Run frontend security scan
+        run: |
+          cd frontend
+          npm audit --audit-level=high
+
+  # Build and Push Images
+  build-backend:
+    needs: [backend-test, security-scan]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build backend Docker image
+        run: |
+          docker build -f docker/Dockerfile.backend -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} .
+          docker build -f docker/Dockerfile.backend -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest .
+      
+      - name: Test backend Docker image
+        run: |
+          docker run --rm -d --name test-backend -p 5001:5000 ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          sleep 15
+          curl -f http://localhost:5001/health || exit 1
+          docker stop test-backend
+      
+      - name: Push backend image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+
+  build-frontend:
+    needs: [frontend-test, security-scan]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build frontend Docker image
+        run: |
+          docker build -f docker/Dockerfile.frontend -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} .
+          docker build -f docker/Dockerfile.frontend -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest .
+      
+      - name: Test frontend Docker image
+        run: |
+          docker run --rm -d --name test-frontend -p 3001:80 ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          sleep 10
+          curl -f http://localhost:3001/ || exit 1
+          docker stop test-frontend
+      
+      - name: Push frontend image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+
+  # Integration Tests
+  integration-test:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start services for integration testing
+        run: |
+          # Create test docker-compose
+          cat > docker-compose.test.yml << EOF
+          version: '3.8'
+          services:
+            backend:
+              image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+              ports:
+                - "5000:5000"
+              environment:
+                - FLASK_ENV=testing
+                - DATABASE_URL=sqlite:///test.db
+            
+            frontend:
+              image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+              ports:
+                - "3000:80"
+              depends_on:
+                - backend
+          EOF
+          
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30
+      
+      - name: Run integration tests
+        run: |
+          # Test backend health
+          curl -f http://localhost:5000/health
+          
+          # Test frontend
+          curl -f http://localhost:3000/
+          
+          # Test API endpoints
+          curl -f http://localhost:5000/api/metrics
+      
+      - name: Cleanup test environment
+        run: |
+          docker-compose -f docker-compose.test.yml down
+
+  # Deploy to Staging
+  deploy-staging:
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Update staging manifests
+        run: |
+          # Update image tags in Kubernetes manifests
+          sed -i "s|image: .*/${{ env.BACKEND_IMAGE }}:.*|image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}|" k8s/backend-deployment.yaml
+          sed -i "s|image: .*/${{ env.FRONTEND_IMAGE }}:.*|image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}|" k8s/frontend-deployment.yaml
+          
+          echo "Updated manifests for staging deployment"
+          echo "Backend image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          echo "Frontend image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+      
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "This would typically apply Kubernetes manifests or trigger ArgoCD sync"
+          # kubectl apply -f k8s/ -n flask-react-staging
+          # argocd app sync flask-react-staging
+
+  # Deploy to Production
+  deploy-production:
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Update production manifests
+        run: |
+          # Update image tags in Kubernetes manifests
+          sed -i "s|image: .*/${{ env.BACKEND_IMAGE }}:.*|image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}|" k8s/backend-deployment.yaml
+          sed -i "s|image: .*/${{ env.FRONTEND_IMAGE }}:.*|image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}|" k8s/frontend-deployment.yaml
+          
+          echo "Updated manifests for production deployment"
+          echo "Backend image: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          echo "Frontend image: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+      
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          echo "This would typically apply Kubernetes manifests or trigger ArgoCD sync"
+          # kubectl apply -f k8s/ -n flask-react-production
+          # argocd app sync flask-react-production
+
+  # Notification
+  notify:
+    needs: [deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify deployment status
+        run: |
+          if [ "${{ needs.deploy-staging.result }}" == "success" ] || [ "${{ needs.deploy-production.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+            echo "Commit: ${{ github.sha }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Author: ${{ github.actor }}"
+          else
+            echo "❌ Deployment failed or skipped"
+          fi

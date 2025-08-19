@@ -1,0 +1,278 @@
+---
+- name: Setup Local CI/CD Pipeline on Debian/Ubuntu
+  hosts: all
+  become: yes
+  vars:
+    cicd_user: "{{ ansible_user }}"
+    cicd_home: "/home/{{ cicd_user }}"
+    project_dir: "{{ cicd_home }}/local-cicd-pipeline"
+    docker_compose_version: "2.24.5"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - git
+          - make
+          - wget
+          - unzip
+          - python3-pip
+          - python3-setuptools
+          - ufw
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_distribution|lower }} {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Add user to docker group
+      user:
+        name: "{{ cicd_user }}"
+        groups: docker
+        append: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Create symbolic link for docker-compose
+      file:
+        src: /usr/local/bin/docker-compose
+        dest: /usr/bin/docker-compose
+        state: link
+
+    - name: Configure UFW firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"    # SSH
+        - "3000"  # Forgejo
+        - "8080"  # ArgoCD
+        - "5000"  # Registry
+        - "9090"  # Prometheus
+        - "3001"  # Grafana
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Create project directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+      become_user: "{{ cicd_user }}"
+
+    - name: Clone CI/CD pipeline repository
+      git:
+        repo: "https://github.com/your-username/local-cicd-pipeline.git"  # Update this URL
+        dest: "{{ project_dir }}"
+        force: yes
+      become_user: "{{ cicd_user }}"
+      ignore_errors: yes  # In case repo doesn't exist yet
+
+    - name: Copy project files if git clone failed
+      copy:
+        src: "../"
+        dest: "{{ project_dir }}"
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: preserve
+      when: ansible_failed_result is defined
+
+    - name: Create data directories
+      file:
+        path: "{{ project_dir }}/data/{{ item }}"
+        state: directory
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+      loop:
+        - forgejo
+        - runner
+        - argocd
+        - registry
+        - prometheus
+        - grafana
+      become_user: "{{ cicd_user }}"
+
+    - name: Create config directory
+      file:
+        path: "{{ project_dir }}/config"
+        state: directory
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+      become_user: "{{ cicd_user }}"
+
+    - name: Copy Prometheus configuration
+      copy:
+        src: "{{ project_dir }}/config/prometheus.yml.example"
+        dest: "{{ project_dir }}/config/prometheus.yml"
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0644'
+        remote_src: yes
+      become_user: "{{ cicd_user }}"
+
+    - name: Create backups directory
+      file:
+        path: "{{ project_dir }}/backups"
+        state: directory
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+      become_user: "{{ cicd_user }}"
+
+    - name: Set correct permissions for data directories
+      file:
+        path: "{{ project_dir }}/data"
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+        recurse: yes
+
+    - name: Install Python Docker library for Ansible
+      pip:
+        name:
+          - docker
+          - docker-compose
+        state: present
+
+    - name: Pull Docker images
+      docker_image:
+        name: "{{ item }}"
+        source: pull
+      loop:
+        - "codeberg.org/forgejo/forgejo:1.21"
+        - "gitea/act_runner:latest"
+        - "quay.io/argoproj/argocd:v2.9.3"
+        - "registry:2"
+        - "prom/prometheus:latest"
+        - "grafana/grafana:latest"
+      become_user: "{{ cicd_user }}"
+
+    - name: Create systemd service for CI/CD pipeline
+      template:
+        src: cicd-pipeline.service.j2
+        dest: /etc/systemd/system/cicd-pipeline.service
+        mode: '0644'
+      notify: reload systemd
+
+    - name: Create environment file
+      template:
+        src: cicd.env.j2
+        dest: "{{ project_dir }}/.env"
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0600'
+
+    - name: Create startup script
+      template:
+        src: start-cicd.sh.j2
+        dest: "{{ project_dir }}/start-cicd.sh"
+        owner: "{{ cicd_user }}"
+        group: "{{ cicd_user }}"
+        mode: '0755'
+
+    - name: Add Docker insecure registry configuration
+      copy:
+        content: |
+          {
+            "insecure-registries": ["localhost:5000", "{{ ansible_default_ipv4.address }}:5000"]
+          }
+        dest: /etc/docker/daemon.json
+        mode: '0644'
+      notify: restart docker
+
+    - name: Install useful aliases
+      lineinfile:
+        path: "{{ cicd_home }}/.bashrc"
+        line: "{{ item }}"
+        create: yes
+      loop:
+        - "alias cicd-start='cd {{ project_dir }} && make start'"
+        - "alias cicd-stop='cd {{ project_dir }} && make stop'"
+        - "alias cicd-status='cd {{ project_dir }} && make status'"
+        - "alias cicd-logs='cd {{ project_dir }} && make logs'"
+        - "alias cicd-clean='cd {{ project_dir }} && make clean'"
+      become_user: "{{ cicd_user }}"
+
+    - name: Display completion message
+      debug:
+        msg: |
+          ========================================
+          CI/CD Pipeline Setup Complete!
+          ========================================
+          
+          Project location: {{ project_dir }}
+          
+          To start the pipeline:
+          1. SSH to the server
+          2. Run: cd {{ project_dir }} && make start
+          3. Wait 2-3 minutes for services to start
+          4. Access services:
+             - Forgejo: http://{{ ansible_default_ipv4.address }}:3000
+             - ArgoCD: http://{{ ansible_default_ipv4.address }}:8080
+             - Registry: http://{{ ansible_default_ipv4.address }}:5000
+          
+          Useful commands:
+          - cicd-start   # Start all services
+          - cicd-stop    # Stop all services  
+          - cicd-status  # Check service status
+          - cicd-logs    # View logs
+          
+          Next steps:
+          1. Configure Forgejo (create admin account)
+          2. Configure ArgoCD (get password with: make argocd-password)
+          3. Follow the Quick Start Guide to deploy your first app
+          
+          Documentation: {{ project_dir }}/docs/
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart docker
+      systemd:
+        name: docker
+        state: restarted
