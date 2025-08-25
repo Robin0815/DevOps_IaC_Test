@@ -1,0 +1,24 @@
+name: system_health_check
+description: "Check system health and resources"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting system health check"
+    
+  - name: "check_disk_space"
+    action: "shell"
+    command: "df -h"
+    
+  - name: "check_memory"
+    action: "shell"
+    command: "free -h"
+    
+  - name: "check_processes"
+    action: "shell"
+    command: "ps aux | head -10"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "System health check completed"

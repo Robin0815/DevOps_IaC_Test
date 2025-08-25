@@ -1,0 +1,45 @@
+---
+version: 1.0
+description: ETL workflow for data processing
+input:
+  - source
+  - destination
+
+tasks:
+  extract:
+    action: data_processing.extract_data
+    next:
+      - when: <% succeeded() %>
+        do: transform
+
+  transform:
+    action: core.local
+    input:
+      cmd: echo "Transforming data..." && sleep 2 && echo "Transform completed"
+    next:
+      - when: <% succeeded() %>
+        do: validate
+
+  validate:
+    action: core.local
+    input:
+      cmd: echo "Validating data..." && sleep 1 && echo "Validation completed"
+    next:
+      - when: <% succeeded() %>
+        do: load
+
+  load:
+    action: core.local
+    input:
+      cmd: echo "Loading data to database..." && sleep 2 && echo "Load completed"
+    next:
+      - when: <% succeeded() %>
+        do: cleanup
+
+  cleanup:
+    action: core.local
+    input:
+      cmd: echo "Cleaning up..." && sleep 1 && echo "Cleanup completed"
+
+output:
+  - result: "Data processing workflow completed successfully"

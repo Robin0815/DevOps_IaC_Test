@@ -1,0 +1,22 @@
+name: api_health_check
+description: "Check health of external APIs"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting API health check"
+    
+  - name: "check_httpbin"
+    action: "http_request"
+    url: "https://httpbin.org/status/200"
+    method: "GET"
+    
+  - name: "check_github_api"
+    action: "http_request"
+    url: "https://api.github.com/status"
+    method: "GET"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "API health check completed"

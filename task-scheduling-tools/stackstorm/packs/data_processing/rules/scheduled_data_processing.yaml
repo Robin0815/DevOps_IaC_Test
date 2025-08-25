@@ -1,0 +1,16 @@
+---
+name: scheduled_data_processing
+pack: data_processing
+description: Schedule data processing workflow to run every hour
+enabled: true
+trigger:
+  type: core.st2.IntervalTimer
+  parameters:
+    unit: hours
+    delta: 1
+criteria: {}
+action:
+  ref: data_processing.data_processing_workflow
+  parameters:
+    source: "demo_source"
+    destination: "demo_destination"

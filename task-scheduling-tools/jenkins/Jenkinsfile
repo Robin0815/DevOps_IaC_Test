@@ -1,0 +1,42 @@
+pipeline {
+    agent any
+    
+    stages {
+        stage('Hello') {
+            steps {
+                echo 'Hello World from Jenkins!'
+                sh 'date'
+            }
+        }
+        
+        stage('Environment Info') {
+            steps {
+                sh 'uname -a'
+                sh 'docker --version || echo "Docker not available"'
+            }
+        }
+        
+        stage('System Check') {
+            steps {
+                sh 'df -h'
+                sh 'free -m || echo "free command not available"'
+            }
+        }
+    }
+    
+    triggers {
+        cron('H/15 * * * *') // Run every 15 minutes
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed!'
+        }
+        success {
+            echo 'Pipeline succeeded!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}

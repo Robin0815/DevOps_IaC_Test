@@ -1,0 +1,40 @@
+name: conditional_workflow_chain
+description: "Demonstrates conditional workflow execution - only runs if data_backup succeeds"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting conditional workflow chain"
+    
+  - name: "check_prerequisite"
+    action: "wait_for_workflow"
+    workflow_name: "data_backup"
+    timeout: 60
+    check_interval: 2
+    
+  - name: "log_prerequisite_met"
+    action: "log"
+    message: "Prerequisite workflow 'data_backup' completed successfully - proceeding with chain"
+    
+  - name: "execute_post_backup_tasks"
+    action: "shell"
+    command: "echo 'Executing post-backup verification...' && sleep 2 && echo 'Backup verification completed'"
+    
+  - name: "update_backup_registry"
+    action: "log"
+    message: "Updating backup registry with latest backup information"
+    
+  - name: "send_success_notification"
+    action: "http_request"
+    url: "https://httpbin.org/post"
+    method: "POST"
+    data:
+      event: "backup_chain_completed"
+      status: "success"
+      backup_workflow: "data_backup"
+      chain_workflow: "conditional_workflow_chain"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "Conditional workflow chain completed - all dependent tasks finished"

@@ -1,0 +1,28 @@
+name: data_backup
+description: "Simulate a data backup workflow"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting data backup process"
+    
+  - name: "create_backup_directory"
+    action: "shell"
+    command: "mkdir -p /tmp/backup_$(date +%Y%m%d_%H%M%S)"
+    
+  - name: "simulate_backup"
+    action: "log"
+    message: "Backing up critical data files..."
+    
+  - name: "wait_for_backup"
+    action: "delay"
+    seconds: 3
+    
+  - name: "verify_backup"
+    action: "shell"
+    command: "ls -la /tmp/backup_*"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "Data backup completed successfully"

@@ -1,0 +1,11 @@
+---
+ref: data_processing
+name: data_processing
+description: Data processing workflow pack
+keywords:
+  - etl
+  - data
+  - processing
+version: 0.1.0
+author: demo-user
+email: demo@example.com

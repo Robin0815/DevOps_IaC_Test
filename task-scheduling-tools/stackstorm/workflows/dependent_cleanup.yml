@@ -1,0 +1,43 @@
+name: dependent_cleanup
+description: "Cleanup workflow that only runs after primary_data_processing completes successfully"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting dependent cleanup workflow"
+    
+  - name: "wait_for_primary"
+    action: "wait_for_workflow"
+    workflow_name: "primary_data_processing"
+    timeout: 120
+    check_interval: 3
+    
+  - name: "cleanup_temp_files"
+    action: "shell"
+    command: "echo 'Cleaning up temporary files...' && mkdir -p /tmp/cleanup_demo && touch /tmp/cleanup_demo/temp_file_$(date +%s).txt && ls -la /tmp/cleanup_demo/"
+    
+  - name: "cleanup_delay"
+    action: "delay"
+    seconds: 2
+    
+  - name: "archive_logs"
+    action: "log"
+    message: "Archiving processing logs and results"
+    
+  - name: "send_notification"
+    action: "http_request"
+    url: "https://httpbin.org/post"
+    method: "POST"
+    data:
+      message: "Data processing pipeline completed successfully"
+      workflow: "dependent_cleanup"
+      timestamp: "{{ current_time }}"
+    
+  - name: "final_cleanup"
+    action: "shell"
+    command: "echo 'Final cleanup completed' && rm -rf /tmp/cleanup_demo"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "Dependent cleanup workflow completed successfully"

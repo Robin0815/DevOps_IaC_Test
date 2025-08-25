@@ -1,0 +1,46 @@
+version: '3.8'
+services:
+  salt-master:
+    image: saltstack/salt:latest
+    ports:
+      - "4505:4505"
+      - "4506:4506"
+      - "8000:8000"
+    environment:
+      - SALT_USE=master
+    volumes:
+      - salt-master-data:/etc/salt
+      - salt-master-cache:/var/cache/salt
+      - salt-master-logs:/var/log/salt
+      - ./salt-config:/srv/salt
+      - ./salt-master-config:/etc/salt/master.d
+    restart: unless-stopped
+    command: sh -c "salt-master -d && salt-api -d && tail -f /var/log/salt/master"
+
+  salt-minion:
+    image: saltstack/salt:latest
+    environment:
+      - SALT_USE=minion
+      - SALT_MASTER=salt-master
+    volumes:
+      - salt-minion-data:/etc/salt
+    depends_on:
+      - salt-master
+    restart: unless-stopped
+    command: salt-minion -l info
+
+  salt-ui:
+    image: nginx:alpine
+    ports:
+      - "3333:80"
+    volumes:
+      - ./salt-ui:/usr/share/nginx/html
+    depends_on:
+      - salt-master
+    restart: unless-stopped
+
+volumes:
+  salt-master-data:
+  salt-master-cache:
+  salt-master-logs:
+  salt-minion-data:

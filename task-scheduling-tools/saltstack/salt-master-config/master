@@ -1,0 +1,22 @@
+# Salt Master Configuration
+interface: 0.0.0.0
+auto_accept: True
+file_roots:
+  base:
+    - /srv/salt
+
+# Enable Salt API
+rest_cherrypy:
+  port: 8000
+  host: 0.0.0.0
+  disable_ssl: True
+  cors_origin: "*"
+
+# Simple authentication for demo
+external_auth:
+  auto:
+    saltapi:
+      - .*
+      - '@wheel'
+      - '@runner'
+      - '@jobs'

@@ -1,0 +1,15 @@
+# Salt API Configuration
+rest_cherrypy:
+  port: 8000
+  host: 0.0.0.0
+  disable_ssl: True
+  cors_origin: "*"
+
+# External authentication
+external_auth:
+  pam:
+    saltapi:
+      - .*
+      - '@wheel'
+      - '@runner'
+      - '@jobs'

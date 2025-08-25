@@ -1,0 +1,8 @@
+---
+name: extract_data
+pack: data_processing
+description: Extract data for processing
+runner_type: python-script
+entry_point: extract_data.py
+enabled: true
+parameters: {}

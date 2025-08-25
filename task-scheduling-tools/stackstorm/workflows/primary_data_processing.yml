@@ -1,0 +1,51 @@
+name: primary_data_processing
+description: "Primary data processing workflow that triggers dependent workflows on success"
+version: "1.0"
+
+steps:
+  - name: "log_start"
+    action: "log"
+    message: "Starting primary data processing workflow"
+    
+  - name: "validate_input_data"
+    action: "shell"
+    command: "echo 'Validating input data...' && sleep 2 && echo 'Input data is valid'"
+    
+  - name: "process_data"
+    action: "log"
+    message: "Processing data batch 1 of 3..."
+    
+  - name: "processing_delay_1"
+    action: "delay"
+    seconds: 3
+    
+  - name: "process_data_2"
+    action: "log"
+    message: "Processing data batch 2 of 3..."
+    
+  - name: "processing_delay_2"
+    action: "delay"
+    seconds: 2
+    
+  - name: "process_data_3"
+    action: "log"
+    message: "Processing data batch 3 of 3..."
+    
+  - name: "processing_delay_3"
+    action: "delay"
+    seconds: 2
+    
+  - name: "validate_output"
+    action: "shell"
+    command: "echo 'Validating processed data...' && sleep 1 && echo 'Output validation successful'"
+    
+  - name: "trigger_dependent_workflow"
+    action: "trigger_workflow"
+    workflow_name: "dependent_cleanup"
+    parameters:
+      source_workflow: "primary_data_processing"
+      batch_id: "batch_001"
+    
+  - name: "log_completion"
+    action: "log"
+    message: "Primary data processing completed successfully - dependent workflows triggered"

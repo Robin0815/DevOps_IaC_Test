@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaltStack Web UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .output {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        .input-group input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧂 SaltStack Web UI</h1>
+            <p>Simple web interface for SaltStack management</p>
+        </div>
+
+        <div class="section">
+            <h3>Quick Actions</h3>
+            <button class="button" onclick="testPing()">Test Ping</button>
+            <button class="button" onclick="listMinions()">List Minions</button>
+            <button class="button" onclick="getGrains()">Get Grains</button>
+            <button class="button" onclick="applyStates()">Apply States</button>
+        </div>
+
+        <div class="section">
+            <h3>Custom Command</h3>
+            <div class="input-group">
+                <input type="text" id="target" placeholder="Target (e.g., '*')" value="*">
+                <input type="text" id="module" placeholder="Module (e.g., cmd.run)" value="cmd.run">
+                <input type="text" id="args" placeholder="Arguments (e.g., 'date')" value="date">
+                <button class="button" onclick="runCommand()">Run Command</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Output</h3>
+            <div id="output" class="output">Ready to execute commands...</div>
+        </div>
+
+        <div class="section">
+            <h3>API Information</h3>
+            <p><strong>Salt API URL:</strong> http://localhost:8000</p>
+            <p><strong>Authentication:</strong> Auto (for demo purposes)</p>
+            <p><strong>Available Endpoints:</strong></p>
+            <ul>
+                <li>GET /stats - API statistics</li>
+                <li>POST /login - Authentication</li>
+                <li>POST / - Execute Salt commands</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        
+        function updateOutput(text) {
+            document.getElementById('output').textContent = text;
+        }
+
+        function makeRequest(endpoint, data = null) {
+            const options = {
+                method: data ? 'POST' : 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            };
+            
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            updateOutput('Executing request...');
+            
+            fetch(API_URL + endpoint, options)
+                .then(response => response.json())
+                .then(data => {
+                    updateOutput(JSON.stringify(data, null, 2));
+                })
+                .catch(error => {
+                    updateOutput('Error: ' + error.message + '\n\nNote: Make sure Salt API is running and CORS is enabled.');
+                });
+        }
+
+        function testPing() {
+            makeRequest('/', {
+                client: 'local',
+                tgt: '*',
+                fun: 'test.ping'
+            });
+        }
+
+        function listMinions() {
+            makeRequest('/keys');
+        }
+
+        function getGrains() {
+            makeRequest('/', {
+                client: 'local',
+                tgt: '*',
+                fun: 'grains.items'
+            });
+        }
+
+        function applyStates() {
+            makeRequest('/', {
+                client: 'local',
+                tgt: '*',
+                fun: 'state.apply'
+            });
+        }
+
+        function runCommand() {
+            const target = document.getElementById('target').value;
+            const module = document.getElementById('module').value;
+            const args = document.getElementById('args').value;
+
+            const data = {
+                client: 'local',
+                tgt: target,
+                fun: module
+            };
+
+            if (args) {
+                data.arg = [args];
+            }
+
+            makeRequest('/', data);
+        }
+
+        // Test API connection on load
+        window.onload = function() {
+            updateOutput('Testing API connection...');
+            fetch(API_URL + '/stats')
+                .then(response => {
+                    if (response.ok) {
+                        updateOutput('✅ Salt API is accessible at ' + API_URL);
+                    } else {
+                        updateOutput('⚠️ Salt API responded with status: ' + response.status);
+                    }
+                })
+                .catch(error => {
+                    updateOutput('❌ Cannot connect to Salt API at ' + API_URL + '\nError: ' + error.message + '\n\nMake sure SaltStack containers are running.');
+                });
+        };
+    </script>
+</body>
+</html>

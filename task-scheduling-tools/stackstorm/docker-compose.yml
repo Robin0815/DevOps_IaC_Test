@@ -1,0 +1,15 @@
+services:
+  workflow-engine:
+    build: .
+    ports:
+      - "8090:8080"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    volumes:
+      - ./workflows:/app/workflows
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  workflow-data:
