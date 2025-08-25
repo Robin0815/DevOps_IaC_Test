@@ -1,0 +1,226 @@
+{
+  "processDefinition": {
+    "name": "Conditional Processing Workflow",
+    "description": "Demonstrates conditional logic, parallel processing, and error handling in DolphinScheduler",
+    "globalParams": [
+      {
+        "prop": "data_source",
+        "value": "api",
+        "type": "VARCHAR"
+      },
+      {
+        "prop": "processing_mode",
+        "value": "batch",
+        "type": "VARCHAR"
+      },
+      {
+        "prop": "quality_threshold",
+        "value": "0.8",
+        "type": "DOUBLE"
+      }
+    ],
+    "timeout": 0,
+    "tenantId": 1,
+    "executionType": "PARALLEL"
+  },
+  "tasks": [
+    {
+      "id": "task_001",
+      "name": "Initialize Workflow",
+      "description": "Initialize workflow and determine processing path",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🚀 Initializing Conditional Workflow\"\necho \"Data Source: ${data_source}\"\necho \"Processing Mode: ${processing_mode}\"\necho \"Quality Threshold: ${quality_threshold}\"\n\n# Create working directories\nmkdir -p /tmp/conditional/{input,output,logs,config}\n\n# Create configuration file\nconfig_file=\"/tmp/conditional/config/workflow_config.txt\"\necho \"data_source=${data_source}\" > $config_file\necho \"processing_mode=${processing_mode}\" >> $config_file\necho \"quality_threshold=${quality_threshold}\" >> $config_file\necho \"workflow_id=$(date +%s)\" >> $config_file\n\necho \"✅ Workflow initialized\"\necho \"Config file: $config_file\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": []
+    },
+    {
+      "id": "task_002",
+      "name": "Check Data Source",
+      "description": "Check data source availability and determine processing path",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Checking Data Source: ${data_source}\"\n\n# Simulate different data source checks\ncase ${data_source} in\n  \"api\")\n    echo \"📡 Checking API endpoint...\"\n    # Simulate API check (90% success rate)\n    if [ $((RANDOM % 10)) -lt 9 ]; then\n      echo \"✅ API endpoint is available\"\n      echo \"api_available=true\" > /tmp/conditional/config/source_status.txt\n      echo \"record_count=1500\" >> /tmp/conditional/config/source_status.txt\n    else\n      echo \"❌ API endpoint is unavailable\"\n      echo \"api_available=false\" > /tmp/conditional/config/source_status.txt\n      echo \"record_count=0\" >> /tmp/conditional/config/source_status.txt\n      exit 1\n    fi\n    ;;\n  \"database\")\n    echo \"🗄️ Checking database connection...\"\n    echo \"✅ Database is available\"\n    echo \"db_available=true\" > /tmp/conditional/config/source_status.txt\n    echo \"record_count=2000\" >> /tmp/conditional/config/source_status.txt\n    ;;\n  \"file\")\n    echo \"📁 Checking file system...\"\n    echo \"✅ File system is available\"\n    echo \"file_available=true\" > /tmp/conditional/config/source_status.txt\n    echo \"record_count=800\" >> /tmp/conditional/config/source_status.txt\n    ;;\n  *)\n    echo \"❌ Unknown data source: ${data_source}\"\n    exit 1\n    ;;\nesac\n\necho \"✅ Data source check completed\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 3,
+      "failRetryInterval": 2,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_001"]
+    },
+    {
+      "id": "task_003",
+      "name": "Extract Data - Batch Mode",
+      "description": "Extract data in batch mode (runs if processing_mode=batch)",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📥 Extracting Data - Batch Mode\"\n\n# Check if we should run batch mode\nif [ \"${processing_mode}\" != \"batch\" ]; then\n  echo \"⏭️ Skipping batch extraction (mode: ${processing_mode})\"\n  exit 0\nfi\n\n# Get record count from source status\nif [ -f \"/tmp/conditional/config/source_status.txt\" ]; then\n  record_count=$(grep \"record_count=\" /tmp/conditional/config/source_status.txt | cut -d'=' -f2)\nelse\n  record_count=1000\nfi\n\necho \"Extracting $record_count records in batch mode...\"\n\n# Simulate batch extraction\nfor i in $(seq 1 $record_count); do\n  if [ $((i % 100)) -eq 0 ]; then\n    echo \"Processed $i records...\"\n  fi\n  echo \"record_$i,batch_data_$i,$(date +'%Y-%m-%d %H:%M:%S')\" >> /tmp/conditional/input/batch_data.csv\ndone\n\nactual_count=$(wc -l < /tmp/conditional/input/batch_data.csv)\necho \"✅ Batch extraction completed: $actual_count records\"\necho \"batch_records=$actual_count\" > /tmp/conditional/config/extraction_result.txt"
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 900,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_002"],
+      "conditionResult": {
+        "successNode": ["task_005"],
+        "failedNode": ["task_004"]
+      }
+    },
+    {
+      "id": "task_004",
+      "name": "Extract Data - Stream Mode",
+      "description": "Extract data in streaming mode (runs if processing_mode=stream)",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🌊 Extracting Data - Stream Mode\"\n\n# Check if we should run stream mode\nif [ \"${processing_mode}\" != \"stream\" ]; then\n  echo \"⏭️ Skipping stream extraction (mode: ${processing_mode})\"\n  exit 0\nfi\n\n# Get record count from source status\nif [ -f \"/tmp/conditional/config/source_status.txt\" ]; then\n  record_count=$(grep \"record_count=\" /tmp/conditional/config/source_status.txt | cut -d'=' -f2)\nelse\n  record_count=500\nfi\n\necho \"Streaming $record_count records...\"\n\n# Simulate streaming extraction (smaller batches)\nfor batch in $(seq 1 $((record_count / 50))); do\n  echo \"Processing stream batch $batch...\"\n  for i in $(seq 1 50); do\n    record_id=$(((batch - 1) * 50 + i))\n    echo \"stream_record_$record_id,stream_data_$record_id,$(date +'%Y-%m-%d %H:%M:%S')\" >> /tmp/conditional/input/stream_data.csv\n  done\n  sleep 0.1  # Simulate streaming delay\ndone\n\nactual_count=$(wc -l < /tmp/conditional/input/stream_data.csv)\necho \"✅ Stream extraction completed: $actual_count records\"\necho \"stream_records=$actual_count\" > /tmp/conditional/config/extraction_result.txt"
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_002"],
+      "conditionResult": {
+        "successNode": ["task_005"],
+        "failedNode": ["task_008"]
+      }
+    },
+    {
+      "id": "task_005",
+      "name": "Data Quality Assessment",
+      "description": "Assess data quality and determine next steps",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Assessing Data Quality\"\n\n# Determine which file to check based on processing mode\nif [ \"${processing_mode}\" = \"batch\" ] && [ -f \"/tmp/conditional/input/batch_data.csv\" ]; then\n  data_file=\"/tmp/conditional/input/batch_data.csv\"\n  echo \"Checking batch data quality...\"\nelif [ \"${processing_mode}\" = \"stream\" ] && [ -f \"/tmp/conditional/input/stream_data.csv\" ]; then\n  data_file=\"/tmp/conditional/input/stream_data.csv\"\n  echo \"Checking stream data quality...\"\nelse\n  echo \"❌ No data file found for quality assessment\"\n  exit 1\nfi\n\nrecord_count=$(wc -l < $data_file)\necho \"Total records: $record_count\"\n\n# Simulate quality checks\nvalid_records=$record_count\ninvalid_records=0\n\n# Simulate some invalid records (5% failure rate)\nif [ $record_count -gt 0 ]; then\n  invalid_records=$((record_count / 20))  # 5% invalid\n  valid_records=$((record_count - invalid_records))\nfi\n\nquality_score=$(echo \"scale=2; $valid_records / $record_count\" | bc -l)\n\necho \"Valid records: $valid_records\"\necho \"Invalid records: $invalid_records\"\necho \"Quality score: $quality_score\"\n\n# Save quality results\nquality_file=\"/tmp/conditional/config/quality_result.txt\"\necho \"total_records=$record_count\" > $quality_file\necho \"valid_records=$valid_records\" >> $quality_file\necho \"invalid_records=$invalid_records\" >> $quality_file\necho \"quality_score=$quality_score\" >> $quality_file\n\n# Check against threshold\nif (( $(echo \"$quality_score >= ${quality_threshold}\" | bc -l) )); then\n  echo \"✅ Quality check passed (score: $quality_score >= ${quality_threshold})\"\n  echo \"quality_passed=true\" >> $quality_file\nelse\n  echo \"❌ Quality check failed (score: $quality_score < ${quality_threshold})\"\n  echo \"quality_passed=false\" >> $quality_file\n  exit 1\nfi"
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_003", "task_004"],
+      "conditionResult": {
+        "successNode": ["task_006", "task_007"],
+        "failedNode": ["task_008"]
+      }
+    },
+    {
+      "id": "task_006",
+      "name": "Process High Quality Data",
+      "description": "Process data that passed quality checks (parallel processing path A)",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"⚡ Processing High Quality Data - Path A\"\n\n# Check quality status\nif [ -f \"/tmp/conditional/config/quality_result.txt\" ]; then\n  quality_passed=$(grep \"quality_passed=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n  if [ \"$quality_passed\" != \"true\" ]; then\n    echo \"⏭️ Skipping high quality processing (quality check failed)\"\n    exit 0\n  fi\nfi\n\n# Determine input file\nif [ \"${processing_mode}\" = \"batch\" ]; then\n  input_file=\"/tmp/conditional/input/batch_data.csv\"\nelse\n  input_file=\"/tmp/conditional/input/stream_data.csv\"\nfi\n\necho \"Processing high quality data from: $input_file\"\n\n# Advanced processing for high quality data\nwhile IFS=',' read -r id data timestamp; do\n  # Add enrichment and advanced transformations\n  enriched_data=\"ENRICHED_${data}\"\n  processed_timestamp=$(date +'%Y-%m-%d %H:%M:%S')\n  confidence_score=\"0.95\"\n  echo \"$id,$enriched_data,$timestamp,$processed_timestamp,$confidence_score\" >> /tmp/conditional/output/high_quality_processed.csv\ndone < $input_file\n\nprocessed_count=$(wc -l < /tmp/conditional/output/high_quality_processed.csv)\necho \"✅ High quality processing completed: $processed_count records\"\necho \"high_quality_processed=$processed_count\" > /tmp/conditional/config/processing_a_result.txt"
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_005"]
+    },
+    {
+      "id": "task_007",
+      "name": "Generate Analytics",
+      "description": "Generate analytics and insights (parallel processing path B)",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📊 Generating Analytics - Path B\"\n\n# Check quality status\nif [ -f \"/tmp/conditional/config/quality_result.txt\" ]; then\n  quality_passed=$(grep \"quality_passed=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n  if [ \"$quality_passed\" != \"true\" ]; then\n    echo \"⏭️ Skipping analytics generation (quality check failed)\"\n    exit 0\n  fi\nfi\n\n# Get quality metrics\nif [ -f \"/tmp/conditional/config/quality_result.txt\" ]; then\n  total_records=$(grep \"total_records=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n  valid_records=$(grep \"valid_records=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n  quality_score=$(grep \"quality_score=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\nelse\n  total_records=0\n  valid_records=0\n  quality_score=0\nfi\n\necho \"Generating analytics for $total_records records...\"\n\n# Create analytics report\nanalytics_file=\"/tmp/conditional/output/analytics_report.txt\"\necho \"=== Data Processing Analytics ===\" > $analytics_file\necho \"Generated: $(date)\" >> $analytics_file\necho \"Processing Mode: ${processing_mode}\" >> $analytics_file\necho \"Data Source: ${data_source}\" >> $analytics_file\necho \"\" >> $analytics_file\necho \"Data Quality Metrics:\" >> $analytics_file\necho \"- Total Records: $total_records\" >> $analytics_file\necho \"- Valid Records: $valid_records\" >> $analytics_file\necho \"- Quality Score: $quality_score\" >> $analytics_file\necho \"- Quality Threshold: ${quality_threshold}\" >> $analytics_file\necho \"\" >> $analytics_file\n\n# Calculate processing statistics\nprocessing_rate=$(echo \"scale=2; $valid_records / 60\" | bc -l)  # records per minute\necho \"Processing Statistics:\" >> $analytics_file\necho \"- Processing Rate: $processing_rate records/min\" >> $analytics_file\necho \"- Success Rate: $(echo \"scale=2; $valid_records * 100 / $total_records\" | bc -l)%\" >> $analytics_file\n\necho \"✅ Analytics generation completed\"\necho \"analytics_generated=true\" > /tmp/conditional/config/processing_b_result.txt\ncat $analytics_file"
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_005"]
+    },
+    {
+      "id": "task_008",
+      "name": "Handle Processing Errors",
+      "description": "Handle errors and implement fallback processing",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🚨 Handling Processing Errors\"\n\n# Create error report\nerror_report=\"/tmp/conditional/output/error_report.txt\"\necho \"=== Error Handling Report ===\" > $error_report\necho \"Generated: $(date)\" >> $error_report\necho \"\" >> $error_report\n\n# Check what went wrong\nif [ ! -f \"/tmp/conditional/config/source_status.txt\" ]; then\n  echo \"❌ Data source check failed\" | tee -a $error_report\nelif [ ! -f \"/tmp/conditional/config/extraction_result.txt\" ]; then\n  echo \"❌ Data extraction failed\" | tee -a $error_report\nelif [ -f \"/tmp/conditional/config/quality_result.txt\" ]; then\n  quality_passed=$(grep \"quality_passed=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n  if [ \"$quality_passed\" = \"false\" ]; then\n    echo \"❌ Data quality check failed\" | tee -a $error_report\n    quality_score=$(grep \"quality_score=\" /tmp/conditional/config/quality_result.txt | cut -d'=' -f2)\n    echo \"Quality score: $quality_score (threshold: ${quality_threshold})\" | tee -a $error_report\n  fi\nfi\n\necho \"\" >> $error_report\necho \"Fallback Actions:\" >> $error_report\n\n# Implement fallback processing\necho \"🔄 Implementing fallback processing...\" | tee -a $error_report\n\n# Create minimal dataset for fallback\necho \"Creating fallback dataset...\" | tee -a $error_report\nfor i in {1..10}; do\n  echo \"fallback_record_$i,fallback_data_$i,$(date +'%Y-%m-%d %H:%M:%S')\" >> /tmp/conditional/output/fallback_data.csv\ndone\n\nfallback_count=$(wc -l < /tmp/conditional/output/fallback_data.csv)\necho \"✅ Fallback processing completed: $fallback_count records\" | tee -a $error_report\n\n# Send alert notification\necho \"📧 Sending error notification...\" | tee -a $error_report\necho \"Alert: Conditional workflow encountered errors and used fallback processing\" | tee -a $error_report\n\necho \"fallback_processed=$fallback_count\" > /tmp/conditional/config/error_handling_result.txt\necho \"✅ Error handling completed\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_002", "task_005"]
+    },
+    {
+      "id": "task_009",
+      "name": "Finalize Workflow",
+      "description": "Finalize workflow and generate summary report",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🏁 Finalizing Conditional Workflow\"\n\n# Create final summary report\nfinal_report=\"/tmp/conditional/output/final_summary.txt\"\necho \"=== Conditional Workflow Summary ===\" > $final_report\necho \"Completion Date: $(date)\" >> $final_report\necho \"Processing Mode: ${processing_mode}\" >> $final_report\necho \"Data Source: ${data_source}\" >> $final_report\necho \"Quality Threshold: ${quality_threshold}\" >> $final_report\necho \"\" >> $final_report\n\n# Determine workflow path taken\necho \"Workflow Execution Path:\" >> $final_report\nif [ -f \"/tmp/conditional/config/processing_a_result.txt\" ]; then\n  high_quality_count=$(grep \"high_quality_processed=\" /tmp/conditional/config/processing_a_result.txt | cut -d'=' -f2)\n  echo \"✅ High Quality Processing: $high_quality_count records\" >> $final_report\nfi\n\nif [ -f \"/tmp/conditional/config/processing_b_result.txt\" ]; then\n  echo \"✅ Analytics Generation: Completed\" >> $final_report\nfi\n\nif [ -f \"/tmp/conditional/config/error_handling_result.txt\" ]; then\n  fallback_count=$(grep \"fallback_processed=\" /tmp/conditional/config/error_handling_result.txt | cut -d'=' -f2)\n  echo \"⚠️ Fallback Processing: $fallback_count records\" >> $final_report\nfi\n\necho \"\" >> $final_report\necho \"Output Files Generated:\" >> $final_report\nls -la /tmp/conditional/output/ >> $final_report\n\necho \"\" >> $final_report\necho \"Workflow Status: COMPLETED\" >> $final_report\n\necho \"✅ Conditional workflow finalized\"\ncat $final_report\n\n# Cleanup temporary files if needed\necho \"🧹 Cleaning up temporary files...\"\n# rm -rf /tmp/conditional/config/  # Uncomment for cleanup\necho \"✅ Workflow completed successfully\""
+      },
+      "flag": "YES",
+      "taskPriority": "LOW",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_006", "task_007", "task_008"]
+    }
+  ],
+  "schedule": {
+    "crontab": "0 */4 * * *",
+    "startTime": "2024-01-01 00:00:00",
+    "endTime": "2025-12-31 23:59:59",
+    "timezoneId": "UTC"
+  }
+}

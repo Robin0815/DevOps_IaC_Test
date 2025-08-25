@@ -1,0 +1,259 @@
+{
+  "processDefinition": {
+    "name": "Advanced ETL Pipeline",
+    "description": "Complex ETL pipeline with parallel processing, conditional logic, and error handling",
+    "globalParams": [
+      {
+        "prop": "source_database",
+        "value": "production_db",
+        "type": "VARCHAR"
+      },
+      {
+        "prop": "target_warehouse", 
+        "value": "analytics_warehouse",
+        "type": "VARCHAR"
+      },
+      {
+        "prop": "batch_size",
+        "value": "1000",
+        "type": "INTEGER"
+      },
+      {
+        "prop": "environment",
+        "value": "production",
+        "type": "VARCHAR"
+      }
+    ],
+    "timeout": 0,
+    "tenantId": 1,
+    "executionType": "PARALLEL"
+  },
+  "tasks": [
+    {
+      "id": "task_001",
+      "name": "Environment Check",
+      "description": "Validate environment and prerequisites",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Environment Check Started\"\necho \"Environment: ${environment}\"\necho \"Source Database: ${source_database}\"\necho \"Target Warehouse: ${target_warehouse}\"\necho \"Batch Size: ${batch_size}\"\n\n# Create working directories\nmkdir -p /tmp/etl/{staging,processed,failed,reports}\n\n# Simulate environment validation\nif [ \"${environment}\" = \"production\" ]; then\n  echo \"✅ Production environment validated\"\n  echo \"🔒 Security checks passed\"\nelse\n  echo \"✅ Development environment validated\"\nfi\n\necho \"✅ Environment check completed\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 3,
+      "failRetryInterval": 2,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": []
+    },
+    {
+      "id": "task_002",
+      "name": "Extract Customer Data",
+      "description": "Extract customer data from source database",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📥 Extracting Customer Data\"\necho \"Source: ${source_database}/customers\"\necho \"Batch Size: ${batch_size}\"\n\n# Simulate customer data extraction\nfor i in {1..5}; do\n  echo \"customer_id_$i,Customer Name $i,customer$i@email.com,$(date +'%Y-%m-%d')\" >> /tmp/etl/staging/customers.csv\ndone\n\nrecord_count=$(wc -l < /tmp/etl/staging/customers.csv)\necho \"✅ Extracted $record_count customer records\"\necho \"File: /tmp/etl/staging/customers.csv\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN", 
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_001"]
+    },
+    {
+      "id": "task_003",
+      "name": "Extract Order Data",
+      "description": "Extract order data from source database",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📥 Extracting Order Data\"\necho \"Source: ${source_database}/orders\"\necho \"Batch Size: ${batch_size}\"\n\n# Simulate order data extraction\nfor i in {1..8}; do\n  customer_id=$((i % 5 + 1))\n  amount=$((RANDOM % 1000 + 100))\n  echo \"order_id_$i,customer_id_$customer_id,$amount,$(date +'%Y-%m-%d')\" >> /tmp/etl/staging/orders.csv\ndone\n\nrecord_count=$(wc -l < /tmp/etl/staging/orders.csv)\necho \"✅ Extracted $record_count order records\"\necho \"File: /tmp/etl/staging/orders.csv\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_001"]
+    },
+    {
+      "id": "task_004",
+      "name": "Extract Product Data",
+      "description": "Extract product data from source database",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📥 Extracting Product Data\"\necho \"Source: ${source_database}/products\"\necho \"Batch Size: ${batch_size}\"\n\n# Simulate product data extraction\nproducts=(\"Laptop\" \"Mouse\" \"Keyboard\" \"Monitor\" \"Headphones\")\nfor i in {1..5}; do\n  product_name=${products[$((i-1))]}\n  price=$((RANDOM % 500 + 50))\n  echo \"product_id_$i,$product_name,$price,Electronics\" >> /tmp/etl/staging/products.csv\ndone\n\nrecord_count=$(wc -l < /tmp/etl/staging/products.csv)\necho \"✅ Extracted $record_count product records\"\necho \"File: /tmp/etl/staging/products.csv\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_001"]
+    },
+    {
+      "id": "task_005",
+      "name": "Data Quality Check",
+      "description": "Validate data quality across all extracted datasets",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Data Quality Check Started\"\n\nquality_report=\"/tmp/etl/reports/quality_report.txt\"\necho \"=== Data Quality Report ===\" > $quality_report\necho \"Generated: $(date)\" >> $quality_report\necho \"\" >> $quality_report\n\n# Check customers data\nif [ -f \"/tmp/etl/staging/customers.csv\" ]; then\n  customer_count=$(wc -l < /tmp/etl/staging/customers.csv)\n  echo \"✅ Customers: $customer_count records\" | tee -a $quality_report\nelse\n  echo \"❌ Customers: File missing\" | tee -a $quality_report\n  exit 1\nfi\n\n# Check orders data\nif [ -f \"/tmp/etl/staging/orders.csv\" ]; then\n  order_count=$(wc -l < /tmp/etl/staging/orders.csv)\n  echo \"✅ Orders: $order_count records\" | tee -a $quality_report\nelse\n  echo \"❌ Orders: File missing\" | tee -a $quality_report\n  exit 1\nfi\n\n# Check products data\nif [ -f \"/tmp/etl/staging/products.csv\" ]; then\n  product_count=$(wc -l < /tmp/etl/staging/products.csv)\n  echo \"✅ Products: $product_count records\" | tee -a $quality_report\nelse\n  echo \"❌ Products: File missing\" | tee -a $quality_report\n  exit 1\nfi\n\necho \"\" >> $quality_report\necho \"Quality Score: 100%\" >> $quality_report\necho \"✅ Data quality check passed\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "FAIL",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_002", "task_003", "task_004"]
+    },
+    {
+      "id": "task_006",
+      "name": "Transform Customer Data",
+      "description": "Clean and transform customer data",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔄 Transforming Customer Data\"\n\n# Transform customers (add derived fields)\nwhile IFS=',' read -r id name email date; do\n  # Extract domain from email\n  domain=$(echo $email | cut -d'@' -f2)\n  # Add timestamp\n  timestamp=$(date +'%Y-%m-%d %H:%M:%S')\n  echo \"$id,$name,$email,$domain,$date,$timestamp\" >> /tmp/etl/processed/customers_transformed.csv\ndone < /tmp/etl/staging/customers.csv\n\ntransformed_count=$(wc -l < /tmp/etl/processed/customers_transformed.csv)\necho \"✅ Transformed $transformed_count customer records\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_005"]
+    },
+    {
+      "id": "task_007",
+      "name": "Transform Order Data",
+      "description": "Clean and transform order data with aggregations",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔄 Transforming Order Data\"\n\n# Transform orders (add calculated fields)\nwhile IFS=',' read -r order_id customer_id amount date; do\n  # Calculate tax (10%)\n  tax=$(echo \"$amount * 0.1\" | bc -l)\n  total=$(echo \"$amount + $tax\" | bc -l)\n  timestamp=$(date +'%Y-%m-%d %H:%M:%S')\n  echo \"$order_id,$customer_id,$amount,$tax,$total,$date,$timestamp\" >> /tmp/etl/processed/orders_transformed.csv\ndone < /tmp/etl/staging/orders.csv\n\ntransformed_count=$(wc -l < /tmp/etl/processed/orders_transformed.csv)\necho \"✅ Transformed $transformed_count order records\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_005"]
+    },
+    {
+      "id": "task_008",
+      "name": "Create Customer Summary",
+      "description": "Generate customer summary with order aggregations",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📊 Creating Customer Summary\"\n\n# Create customer summary by joining data\necho \"customer_id,customer_name,email,total_orders,total_amount\" > /tmp/etl/processed/customer_summary.csv\n\n# Process each customer\nwhile IFS=',' read -r cust_id name email domain reg_date timestamp; do\n  # Count orders for this customer\n  order_count=$(grep \",$cust_id,\" /tmp/etl/processed/orders_transformed.csv | wc -l)\n  # Sum total amount for this customer\n  total_amount=$(grep \",$cust_id,\" /tmp/etl/processed/orders_transformed.csv | cut -d',' -f5 | paste -sd+ | bc -l)\n  \n  if [ -z \"$total_amount\" ]; then\n    total_amount=0\n  fi\n  \n  echo \"$cust_id,$name,$email,$order_count,$total_amount\" >> /tmp/etl/processed/customer_summary.csv\ndone < /tmp/etl/processed/customers_transformed.csv\n\nsummary_count=$(tail -n +2 /tmp/etl/processed/customer_summary.csv | wc -l)\necho \"✅ Created customer summary with $summary_count records\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 600,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_006", "task_007"]
+    },
+    {
+      "id": "task_009",
+      "name": "Load to Warehouse",
+      "description": "Load all transformed data to target warehouse",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📤 Loading Data to Warehouse\"\necho \"Target: ${target_warehouse}\"\n\n# Simulate loading to warehouse\nwarehouse_dir=\"/tmp/etl/${target_warehouse}\"\nmkdir -p $warehouse_dir\n\n# Copy transformed data to warehouse\ncp /tmp/etl/processed/customers_transformed.csv $warehouse_dir/\ncp /tmp/etl/processed/orders_transformed.csv $warehouse_dir/\ncp /tmp/etl/processed/customer_summary.csv $warehouse_dir/\n\n# Create load manifest\necho \"=== Load Manifest ===\" > $warehouse_dir/load_manifest.txt\necho \"Load Date: $(date)\" >> $warehouse_dir/load_manifest.txt\necho \"Environment: ${environment}\" >> $warehouse_dir/load_manifest.txt\necho \"\" >> $warehouse_dir/load_manifest.txt\necho \"Files Loaded:\" >> $warehouse_dir/load_manifest.txt\nls -la $warehouse_dir/*.csv >> $warehouse_dir/load_manifest.txt\n\necho \"✅ Data loaded to warehouse successfully\"\necho \"Location: $warehouse_dir\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 3,
+      "failRetryInterval": 2,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "FAIL",
+      "timeout": 900,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_008"]
+    },
+    {
+      "id": "task_010",
+      "name": "Data Validation",
+      "description": "Validate loaded data integrity",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Validating Loaded Data\"\n\nwarehouse_dir=\"/tmp/etl/${target_warehouse}\"\nvalidation_report=\"/tmp/etl/reports/validation_report.txt\"\n\necho \"=== Data Validation Report ===\" > $validation_report\necho \"Validation Date: $(date)\" >> $validation_report\necho \"\" >> $validation_report\n\n# Validate customer data\nif [ -f \"$warehouse_dir/customers_transformed.csv\" ]; then\n  customer_count=$(wc -l < $warehouse_dir/customers_transformed.csv)\n  echo \"✅ Customers in warehouse: $customer_count\" | tee -a $validation_report\nelse\n  echo \"❌ Customer data missing in warehouse\" | tee -a $validation_report\n  exit 1\nfi\n\n# Validate order data\nif [ -f \"$warehouse_dir/orders_transformed.csv\" ]; then\n  order_count=$(wc -l < $warehouse_dir/orders_transformed.csv)\n  echo \"✅ Orders in warehouse: $order_count\" | tee -a $validation_report\nelse\n  echo \"❌ Order data missing in warehouse\" | tee -a $validation_report\n  exit 1\nfi\n\n# Validate summary data\nif [ -f \"$warehouse_dir/customer_summary.csv\" ]; then\n  summary_count=$(tail -n +2 $warehouse_dir/customer_summary.csv | wc -l)\n  echo \"✅ Customer summaries: $summary_count\" | tee -a $validation_report\nelse\n  echo \"❌ Summary data missing in warehouse\" | tee -a $validation_report\n  exit 1\nfi\n\necho \"\" >> $validation_report\necho \"Validation Status: PASSED\" >> $validation_report\necho \"✅ Data validation completed successfully\""
+      },
+      "flag": "YES",
+      "taskPriority": "HIGH",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "OPEN",
+      "timeoutNotifyStrategy": "FAIL",
+      "timeout": 300,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_009"]
+    },
+    {
+      "id": "task_011",
+      "name": "Send Success Notification",
+      "description": "Send success notification and cleanup",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📧 Sending Success Notification\"\n\n# Create final report\nfinal_report=\"/tmp/etl/reports/final_report.txt\"\necho \"=== ETL Pipeline Execution Report ===\" > $final_report\necho \"Execution Date: $(date)\" >> $final_report\necho \"Environment: ${environment}\" >> $final_report\necho \"Status: SUCCESS\" >> $final_report\necho \"\" >> $final_report\n\n# Add statistics\necho \"Processing Statistics:\" >> $final_report\nif [ -f \"/tmp/etl/${target_warehouse}/customers_transformed.csv\" ]; then\n  echo \"- Customers processed: $(wc -l < /tmp/etl/${target_warehouse}/customers_transformed.csv)\" >> $final_report\nfi\nif [ -f \"/tmp/etl/${target_warehouse}/orders_transformed.csv\" ]; then\n  echo \"- Orders processed: $(wc -l < /tmp/etl/${target_warehouse}/orders_transformed.csv)\" >> $final_report\nfi\nif [ -f \"/tmp/etl/${target_warehouse}/customer_summary.csv\" ]; then\n  echo \"- Summaries created: $(tail -n +2 /tmp/etl/${target_warehouse}/customer_summary.csv | wc -l)\" >> $final_report\nfi\n\necho \"\" >> $final_report\necho \"All data successfully loaded to: ${target_warehouse}\" >> $final_report\n\necho \"✅ ETL Pipeline completed successfully!\"\ncat $final_report\n\n# Simulate sending notification (in real scenario, this would send email/slack/etc)\necho \"📧 Notification sent to stakeholders\""
+      },
+      "flag": "YES",
+      "taskPriority": "LOW",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_010"]
+    }
+  ],
+  "schedule": {
+    "crontab": "0 1 * * *",
+    "startTime": "2024-01-01 00:00:00",
+    "endTime": "2025-12-31 23:59:59",
+    "timezoneId": "UTC"
+  }
+}

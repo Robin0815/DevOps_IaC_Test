@@ -44,49 +44,47 @@ docker-compose -f saltstack/docker-compose.yml exec salt-master \
   salt '*' state.apply data_processing
 ```
 
-## Individual Services
+## Individual Service Management
 
-### Airflow
-```bash
-cd airflow
-docker-compose up -d
-```
-- Web UI: http://localhost:8080
-- Username: `airflow`
-- Password: `airflow`
+Each service now has dedicated start/stop scripts with health checks and colored output:
 
-### Prefect
+### Start Individual Services
 ```bash
-cd prefect
-docker-compose up -d
+cd airflow && ./start.sh       # 🌪️  Apache Airflow
+cd prefect && ./start.sh       # 🔮 Prefect  
+cd stackstorm && ./start.sh    # ⚡ StackStorm
+cd jenkins && ./start.sh       # 🏗️  Jenkins
+cd saltstack && ./start.sh     # 🧂 SaltStack
+cd dolphinscheduler && ./start.sh # 🐬 DolphinScheduler
 ```
-- Web UI: http://localhost:4200
 
-### StackStorm
+### Stop Individual Services
 ```bash
-cd stackstorm
-docker-compose up -d
+cd <service> && ./stop.sh              # Clean stop
+cd <service> && ./stop.sh -v           # Stop and clean volumes
+cd <service> && ./stop.sh --force      # Force cleanup without prompts
 ```
-- Web UI: https://localhost
-- Username: `st2admin`
-- Password: `Ch@ngeMe`
 
-### Jenkins
-```bash
-cd jenkins
-docker-compose up -d
-```
-- Web UI: http://localhost:8081
-- Get initial password: `docker-compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword`
+### Service Access Information
 
-### SaltStack
+| Service | Web UI | Credentials | Port |
+|---------|--------|-------------|------|
+| **Airflow** | http://localhost:8080 | airflow/airflow | 8080 |
+| **Prefect** | http://localhost:4200 | No auth required | 4200 |
+| **StackStorm** | http://localhost:8090 | No auth required | 8090 |
+| **Jenkins** | http://localhost:8081 | See initial setup | 8081 |
+| **SaltStack** | http://localhost:3333 | No auth required | 3333 |
+| **DolphinScheduler** | http://localhost:12345/dolphinscheduler/ui | admin/dolphinscheduler123 | 12345 |
+
+### Advanced Management
 ```bash
-cd saltstack
-docker-compose up -d
+# Global management (from main directory)
+./start-all.sh              # Start all services with health checks
+./stop-all.sh               # Stop all services
+./status.sh                 # Check status of all services
+./logs.sh <service> -f      # Follow logs for specific service
+./restart.sh <service>      # Restart specific service
 ```
-- Web UI: http://localhost:3333
-- Salt API: http://localhost:8000
-- Master CLI: `docker-compose exec salt-master salt --help`
 
 ## Monitoring
 

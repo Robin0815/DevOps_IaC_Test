@@ -1,0 +1,129 @@
+{
+  "processDefinition": {
+    "name": "Simple Data Processing",
+    "description": "A basic data processing workflow demonstrating DolphinScheduler capabilities",
+    "globalParams": [
+      {
+        "prop": "input_path",
+        "value": "/tmp/input",
+        "type": "VARCHAR"
+      },
+      {
+        "prop": "output_path", 
+        "value": "/tmp/output",
+        "type": "VARCHAR"
+      }
+    ],
+    "timeout": 0,
+    "tenantId": 1,
+    "executionType": "PARALLEL"
+  },
+  "tasks": [
+    {
+      "id": "task_001",
+      "name": "Data Extraction",
+      "description": "Extract data from source",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Starting data extraction...\"\necho \"Extracting data from source system\"\nmkdir -p ${input_path}\necho \"Sample data record 1\" > ${input_path}/data.txt\necho \"Sample data record 2\" >> ${input_path}/data.txt\necho \"Sample data record 3\" >> ${input_path}/data.txt\necho \"✅ Data extraction completed\"\necho \"Records extracted: $(wc -l < ${input_path}/data.txt)\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": []
+    },
+    {
+      "id": "task_002", 
+      "name": "Data Validation",
+      "description": "Validate extracted data quality",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔍 Starting data validation...\"\nif [ ! -f \"${input_path}/data.txt\" ]; then\n  echo \"❌ Input file not found!\"\n  exit 1\nfi\n\nrecord_count=$(wc -l < ${input_path}/data.txt)\necho \"Validating $record_count records\"\n\nif [ $record_count -lt 1 ]; then\n  echo \"❌ No data found to validate\"\n  exit 1\nfi\n\necho \"✅ Data validation passed\"\necho \"Valid records: $record_count\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM", 
+      "workerGroup": "default",
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_001"]
+    },
+    {
+      "id": "task_003",
+      "name": "Data Transformation", 
+      "description": "Transform and clean data",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"🔄 Starting data transformation...\"\nmkdir -p ${output_path}\n\n# Transform data (add timestamp and convert to uppercase)\nwhile IFS= read -r line; do\n  timestamp=$(date '+%Y-%m-%d %H:%M:%S')\n  echo \"[$timestamp] $(echo $line | tr '[:lower:]' '[:upper:]')\" >> ${output_path}/transformed_data.txt\ndone < ${input_path}/data.txt\n\ntransformed_count=$(wc -l < ${output_path}/transformed_data.txt)\necho \"✅ Data transformation completed\"\necho \"Transformed records: $transformed_count\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default", 
+      "failRetryTimes": 2,
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_002"]
+    },
+    {
+      "id": "task_004",
+      "name": "Data Loading",
+      "description": "Load transformed data to destination",
+      "type": "SHELL", 
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📤 Starting data loading...\"\n\nif [ ! -f \"${output_path}/transformed_data.txt\" ]; then\n  echo \"❌ Transformed data file not found!\"\n  exit 1\nfi\n\n# Simulate loading to destination (copy to final location)\ncp ${output_path}/transformed_data.txt ${output_path}/final_data.txt\n\nloaded_count=$(wc -l < ${output_path}/final_data.txt)\necho \"✅ Data loading completed\"\necho \"Loaded records: $loaded_count\"\necho \"Final data location: ${output_path}/final_data.txt\""
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 2, 
+      "failRetryInterval": 1,
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_003"]
+    },
+    {
+      "id": "task_005",
+      "name": "Generate Report",
+      "description": "Generate processing summary report",
+      "type": "SHELL",
+      "params": {
+        "rawScript": "#!/bin/bash\necho \"📊 Generating processing report...\"\n\nreport_file=\"${output_path}/processing_report.txt\"\necho \"=== Data Processing Report ===\" > $report_file\necho \"Generated: $(date)\" >> $report_file\necho \"\" >> $report_file\n\nif [ -f \"${input_path}/data.txt\" ]; then\n  input_records=$(wc -l < ${input_path}/data.txt)\n  echo \"Input records: $input_records\" >> $report_file\nfi\n\nif [ -f \"${output_path}/final_data.txt\" ]; then\n  output_records=$(wc -l < ${output_path}/final_data.txt)\n  echo \"Output records: $output_records\" >> $report_file\nfi\n\necho \"Status: SUCCESS\" >> $report_file\necho \"\" >> $report_file\necho \"Files created:\" >> $report_file\nls -la ${output_path}/ >> $report_file\n\necho \"✅ Report generated: $report_file\"\ncat $report_file"
+      },
+      "flag": "YES",
+      "taskPriority": "MEDIUM",
+      "workerGroup": "default",
+      "failRetryTimes": 1,
+      "failRetryInterval": 1, 
+      "timeoutFlag": "CLOSE",
+      "timeoutNotifyStrategy": "WARN",
+      "timeout": 0,
+      "delayTime": 0,
+      "environmentCode": -1,
+      "preTasks": ["task_004"]
+    }
+  ],
+  "schedule": {
+    "crontab": "0 2 * * *",
+    "startTime": "2024-01-01 00:00:00",
+    "endTime": "2025-12-31 23:59:59",
+    "timezoneId": "UTC"
+  }
+}

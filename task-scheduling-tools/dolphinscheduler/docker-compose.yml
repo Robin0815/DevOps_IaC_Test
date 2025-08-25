@@ -1,0 +1,26 @@
+services:
+  dolphinscheduler-standalone:
+    image: apache/dolphinscheduler-standalone-server:latest
+    platform: linux/amd64
+    container_name: dolphinscheduler-standalone
+    environment:
+      DATABASE_TYPE: h2
+      SPRING_PROFILES_ACTIVE: h2
+      TZ: UTC
+    ports:
+      - "12345:12345"  # API port
+      - "12346:8888"   # UI port
+    volumes:
+      - dolphinscheduler-logs:/opt/dolphinscheduler/logs
+      - dolphinscheduler-shared:/opt/dolphinscheduler/shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/dolphinscheduler/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  dolphinscheduler-logs:
+  dolphinscheduler-shared:
